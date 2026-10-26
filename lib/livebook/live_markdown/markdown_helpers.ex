@@ -394,9 +394,9 @@ defmodule Livebook.LiveMarkdown.MarkdownHelpers do
     item_separator = if(spaced?, do: "\n\n", else: "\n")
 
     items
-    |> Enum.map(fn {"li", _, content, %{}} -> markdown_from_ast(content) end)
     |> Enum.with_index()
-    |> Enum.map(fn {inner, index} ->
+    |> Enum.map(fn {{"li", _, content, %{}}, index} ->
+      inner = render_list_item(content, spaced?, indent_fun.(index))
       [first_line | lines] = String.split(inner, "\n")
 
       first_line = [marker_fun.(index), first_line]
@@ -411,6 +411,27 @@ defmodule Livebook.LiveMarkdown.MarkdownHelpers do
     end)
     |> Enum.intersperse(item_separator)
   end
+
+  # In a tight list, a blank line inside an item followed by content indented
+  # four or more spaces makes the parser treat the whole list as loose, so the
+  # blocks of such items are kept on consecutive lines
+  defp render_list_item(content, false = _spaced?, indent) when indent >= 4 do
+    content
+    |> Enum.with_index()
+    |> Enum.chunk_by(fn {node, index} -> if block_node?(node), do: index, else: :inline end)
+    |> Enum.map_join("\n", fn chunk -> chunk |> Enum.map(&elem(&1, 0)) |> markdown_from_ast() end)
+  end
+
+  defp render_list_item(content, _spaced?, _indent), do: markdown_from_ast(content)
+
+  # Elements that build_md/2 renders as blocks
+  defp block_node?({_tag, _attrs, _lines, %{verbatim: true}}), do: true
+  defp block_node?({:comment, _attrs, _lines, %{comment: true}}), do: true
+
+  defp block_node?({tag, _attrs, _content, %{}}),
+    do: tag in ~w(p h1 h2 h3 h4 h5 h6 pre blockquote table ul ol hr)
+
+  defp block_node?(_node), do: false
 
   defp spaced_list_items?([{"li", _, [{"p", _, _content, %{}} | _], %{}} | _items]), do: true
   defp spaced_list_items?([_ | items]), do: spaced_list_items?(items)

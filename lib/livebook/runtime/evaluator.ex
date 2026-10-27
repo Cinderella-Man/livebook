@@ -751,7 +751,7 @@ defmodule Livebook.Runtime.Evaluator do
 
     formatted =
       module.format_error(description)
-      |> :erlang.list_to_binary()
+      |> IO.chardata_to_string()
 
     code_marker = %{
       line: line,
